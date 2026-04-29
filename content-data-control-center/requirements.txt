@@ -1,0 +1,9 @@
+anthropic
+streamlit
+gspread
+google-auth
+google-auth-oauthlib
+google-api-python-client
+requests
+beautifulsoup4
+python-dotenv
