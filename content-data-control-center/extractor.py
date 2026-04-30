@@ -120,13 +120,17 @@ _EXTRACTION_TOOL = {
 
 _SYSTEM_PROMPT = (
     "You are a data extraction assistant for a content team. "
-    "Your job is to read article text and extract specific factual data points: "
-    "BBB scores, company ratings, cost figures, survey statistics, and lawsuit mentions. "
-    "Extract ONLY values that are explicitly stated in the text. "
+    "You will receive HTML from a published article page. "
+    "Your job is to read the HTML — including tables, cards, and structured modules — "
+    "and extract specific factual data points: BBB scores, company ratings, cost figures, "
+    "survey statistics, and lawsuit mentions. "
+    "Pay close attention to comparison tables and company cards where multiple companies "
+    "are listed side by side — make sure you associate each data point with the correct company. "
+    "Extract ONLY values that are explicitly stated in the HTML. "
     "Do not guess, infer, or hallucinate values. "
     "If a value is not present, return null for that field. "
-    "For context_snippet fields, copy the exact sentence or phrase from the article "
-    "where the data point appears — this must be a verbatim substring of the article text."
+    "For context_snippet fields, copy the exact visible text (not HTML tags) from the page "
+    "where the data point appears."
 )
 
 
@@ -144,7 +148,7 @@ def extract_data_from_page(page_text: str) -> dict:
             {"role": "system", "content": _SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Please extract all data points from the following article:\n\n{page_text}",
+                "content": f"Please extract all data points from the following page HTML:\n\n{page_text}",
             },
         ],
     )
