@@ -29,7 +29,7 @@ def _get(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
-ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
+OPENROUTER_API_KEY = _get("OPENROUTER_API_KEY")
 GOOGLE_SHEET_ID = _get("GOOGLE_SHEET_ID")
 GOOGLE_DRIVE_FOLDER_ID = _get("GOOGLE_DRIVE_FOLDER_ID")
 
@@ -37,7 +37,6 @@ GOOGLE_DRIVE_FOLDER_ID = _get("GOOGLE_DRIVE_FOLDER_ID")
 GOOGLE_CREDENTIALS_PATH = _get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
 
 # For Streamlit Cloud: the entire service account JSON stored as a string secret
-# Set this in the Streamlit Cloud dashboard as GOOGLE_CREDENTIALS_JSON
 GOOGLE_CREDENTIALS_JSON = _get("GOOGLE_CREDENTIALS_JSON", "")
 
 # Sheet tab names
@@ -46,8 +45,8 @@ TAB_GENERAL_COST = "General Cost Data"
 TAB_AUDIT_REPORT = "Audit Report"
 TAB_URLS = "URLs"
 
-# Claude model
-CLAUDE_MODEL = "claude-sonnet-4-6"
+# Model to use via OpenRouter — Claude Sonnet is a good balance of speed and accuracy
+OPENROUTER_MODEL = "anthropic/claude-sonnet-4-5"
 
 
 def get_google_credentials(scopes: list[str]):
