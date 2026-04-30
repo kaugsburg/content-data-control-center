@@ -50,9 +50,10 @@ def read_general_cost_data() -> list[dict]:
 
 def write_audit_report(rows: list[dict]) -> None:
     """
-    Append mismatch rows to the Audit Report tab.
-    Each row dict must have: page_url, company_or_category, data_type,
-    found_on_page, master_value, notes, doc_link
+    Append one row per page to the Audit Report tab.
+    rows is a list of mismatch dicts grouped by page — we collapse them into
+    one summary row per unique page_url.
+    Each row dict must have: page_url, doc_link, and a list of mismatches.
     """
     if not rows:
         return
@@ -61,18 +62,31 @@ def write_audit_report(rows: list[dict]) -> None:
     ws = sheet.worksheet(config.TAB_AUDIT_REPORT)
     run_date = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    new_rows = []
+    # Group mismatches by page URL
+    pages: dict[str, dict] = {}
     for r in rows:
+        url = r.get("page_url", "")
+        if url not in pages:
+            pages[url] = {
+                "doc_link": r.get("doc_link", ""),
+                "mismatches": [],
+            }
+        pages[url]["mismatches"].append(
+            f"{r.get('company_or_category', '')} / {r.get('data_type', '')}: "
+            f"found '{r.get('found_on_page', '')}' → should be '{r.get('master_value', '')}'"
+        )
+
+    new_rows = []
+    for url, data in pages.items():
+        summary = " | ".join(data["mismatches"])
+        mismatch_count = len(data["mismatches"])
         new_rows.append([
             run_date,
-            r.get("page_url", ""),
-            r.get("company_or_category", ""),
-            r.get("data_type", ""),
-            r.get("found_on_page", ""),
-            r.get("master_value", ""),
-            r.get("notes", ""),
-            r.get("doc_link", ""),
+            url,
+            mismatch_count,
+            summary,
+            data["doc_link"],
         ])
 
     ws.append_rows(new_rows, value_input_option="USER_ENTERED")
-    print(f"  → Wrote {len(new_rows)} mismatch row(s) to Audit Report.")
+    print(f"  → Wrote {len(new_rows)} page row(s) to Audit Report.")
