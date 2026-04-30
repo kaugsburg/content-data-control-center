@@ -30,6 +30,7 @@ def _get(key: str, default: str = "") -> str:
 
 
 OPENROUTER_API_KEY = _get("OPENROUTER_API_KEY")
+OPENAI_API_KEY = _get("OPENAI_API_KEY")
 GOOGLE_SHEET_ID = _get("GOOGLE_SHEET_ID")
 GOOGLE_DRIVE_FOLDER_ID = _get("GOOGLE_DRIVE_FOLDER_ID")
 
@@ -47,6 +48,7 @@ TAB_URLS = "URLs"
 
 # Model to use via OpenRouter — Claude Sonnet is a good balance of speed and accuracy
 OPENROUTER_MODEL = "anthropic/claude-sonnet-4-5"
+AI_MODEL = "gpt-4o"
 
 
 def get_google_credentials(scopes: list[str]):
