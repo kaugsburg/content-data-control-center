@@ -38,20 +38,20 @@ def create_review_doc(
 
     doc_title = f"{page_title} — Data Review {datetime.now().strftime('%Y-%m-%d')}"
 
-    # Create empty doc
-    doc = docs_service.documents().create(body={"title": doc_title}).execute()
-    doc_id = doc["documentId"]
-
-    # Move to the configured Drive folder
+    # Create the doc directly in the shared folder via Drive API
+    # This avoids permission errors from creating in the service account's root Drive
+    file_metadata = {
+        "name": doc_title,
+        "mimeType": "application/vnd.google-apps.document",
+    }
     if config.GOOGLE_DRIVE_FOLDER_ID:
-        file = drive_service.files().get(fileId=doc_id, fields="parents").execute()
-        previous_parents = ",".join(file.get("parents", []))
-        drive_service.files().update(
-            fileId=doc_id,
-            addParents=config.GOOGLE_DRIVE_FOLDER_ID,
-            removeParents=previous_parents,
-            fields="id, parents",
-        ).execute()
+        file_metadata["parents"] = [config.GOOGLE_DRIVE_FOLDER_ID]
+
+    doc_file = drive_service.files().create(
+        body=file_metadata,
+        fields="id",
+    ).execute()
+    doc_id = doc_file["id"]
 
     # Build the full document text
     separator = "\n" + ("─" * 60) + "\n\n"
