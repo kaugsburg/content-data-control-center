@@ -120,16 +120,18 @@ _EXTRACTION_TOOL = {
 
 _SYSTEM_PROMPT = (
     "You are a data extraction assistant for a content team. "
-    "You will receive HTML from a published article page. "
-    "Your job is to read the HTML — including tables, cards, and structured modules — "
-    "and extract specific factual data points: BBB scores, company ratings, cost figures, "
-    "survey statistics, and lawsuit mentions. "
-    "Pay close attention to comparison tables and company cards where multiple companies "
-    "are listed side by side — make sure you associate each data point with the correct company. "
-    "Extract ONLY values that are explicitly stated in the HTML. "
+    "You will receive structured text extracted from a published article page. "
+    "Table rows are formatted as: Column1 | Column2 | Column3. "
+    "List items are prefixed with a bullet (•). "
+    "Your job is to extract specific factual data points: BBB scores, company ratings, "
+    "cost figures, survey statistics, and lawsuit mentions. "
+    "Pay close attention to comparison tables where multiple companies are listed — "
+    "each row represents one company and its data. Make sure you associate each value "
+    "with the correct company name in that row. "
+    "Extract ONLY values that are explicitly stated in the text. "
     "Do not guess, infer, or hallucinate values. "
-    "If a value is not present, return null for that field. "
-    "For context_snippet fields, copy the exact visible text (not HTML tags) from the page "
+    "If a value is not present for a company, return null for that field. "
+    "For context_snippet fields, copy the exact line or phrase from the text "
     "where the data point appears."
 )
 
@@ -148,7 +150,7 @@ def extract_data_from_page(page_text: str) -> dict:
             {"role": "system", "content": _SYSTEM_PROMPT},
             {
                 "role": "user",
-                "content": f"Please extract all data points from the following page HTML:\n\n{page_text}",
+                "content": f"Please extract all data points from the following page content:\n\n{page_text}",
             },
         ],
     )

@@ -9,18 +9,15 @@ HEADERS = {
     )
 }
 
-# Tags to remove entirely (content + tag)
 _REMOVE_TAGS = ["nav", "footer", "header", "script", "style", "noscript", "aside",
-                "iframe", "svg", "button", "form"]
+                "iframe", "svg", "button", "form", "meta", "link"]
 
 
 def fetch_page(url: str) -> tuple[str, str]:
     """
-    Fetch a URL and return (clean_html, page_title).
-    clean_html is the page body with scripts/nav/footer removed but with
-    structural tags (tables, divs) preserved so the AI can read relationships
-    between companies and their data points.
-    Raises requests.HTTPError on non-2xx responses.
+    Fetch a URL and return (clean_content, page_title).
+    Returns structured text that preserves table rows and list items
+    while stripping HTML noise so the AI can reliably extract data.
     """
     response = requests.get(url, headers=HEADERS, timeout=30)
     response.raise_for_status()
@@ -31,7 +28,7 @@ def fetch_page(url: str) -> tuple[str, str]:
     title_tag = soup.find("title")
     page_title = title_tag.get_text(strip=True) if title_tag else url
 
-    # Remove boilerplate tags entirely
+    # Remove boilerplate
     for tag in soup(_REMOVE_TAGS):
         tag.decompose()
 
@@ -40,7 +37,33 @@ def fetch_page(url: str) -> tuple[str, str]:
     if main is None:
         main = soup
 
-    # Return cleaned HTML string — preserves tables, divs, and data structure
-    clean_html = str(main)
+    # Strip all HTML attributes to remove noise
+    for tag in main.find_all(True):
+        tag.attrs = {}
 
-    return clean_html, page_title
+    # Convert to structured text:
+    # Table rows get pipe separators so columns stay associated
+    # List items get bullet prefixes
+    lines = []
+    seen = set()
+
+    for tag in main.find_all(["tr", "li", "h1", "h2", "h3", "h4", "p", "td", "th"]):
+        if tag.name == "tr":
+            cells = [cell.get_text(strip=True) for cell in tag.find_all(["td", "th"])]
+            row = " | ".join(c for c in cells if c)
+            if row and row not in seen:
+                seen.add(row)
+                lines.append(row)
+        elif tag.name == "li":
+            text = tag.get_text(strip=True)
+            if text and text not in seen:
+                seen.add(text)
+                lines.append(f"• {text}")
+        else:
+            text = tag.get_text(separator=" ", strip=True)
+            if text and len(text) > 3 and text not in seen:
+                seen.add(text)
+                lines.append(text)
+
+    clean_content = "\n".join(lines)
+    return clean_content, page_title
