@@ -3,8 +3,7 @@ from openai import OpenAI
 import config
 
 _client = OpenAI(
-    api_key=config.OPENROUTER_API_KEY,
-    base_url="https://openrouter.ai/api/v1",
+    api_key=config.OPENAI_API_KEY,
 )
 
 _EXTRACTION_TOOL = {
@@ -137,7 +136,7 @@ def extract_data_from_page(page_text: str) -> dict:
     Returns a dict with keys: page_title, companies, general_costs.
     """
     response = _client.chat.completions.create(
-        model=config.OPENROUTER_MODEL,
+        model=config.AI_MODEL,
         max_tokens=4096,
         tools=[_EXTRACTION_TOOL],
         tool_choice={"type": "function", "function": {"name": "extract_page_data"}},
