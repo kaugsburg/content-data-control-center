@@ -61,12 +61,15 @@ with col1:
 with col2:
     st.metric("Pages to check", len(urls))
 
-run_button = st.button(
-    "▶ Run Data Check",
-    type="primary",
-    disabled=len(urls) == 0,
-    use_container_width=False,
-)
+col_btn, col_debug = st.columns([3, 1])
+with col_btn:
+    run_button = st.button(
+        "▶ Run Data Check",
+        type="primary",
+        disabled=len(urls) == 0,
+    )
+with col_debug:
+    debug_mode = st.toggle("Debug mode", value=False, help="Shows extracted page text and AI output for each page")
 
 # ── Run pipeline ──────────────────────────────────────────────────────────────
 if run_button:
@@ -109,6 +112,11 @@ if run_button:
                 st.warning(f"&nbsp;&nbsp;↳ Could not fetch page — skipping. ({e})")
             continue
 
+        if debug_mode:
+            with log:
+                with st.expander(f"DEBUG — Extracted text from page {i+1}", expanded=False):
+                    st.text(page_text[:5000] + ("..." if len(page_text) > 5000 else ""))
+
         # Extract with Claude
         try:
             extracted = extractor.extract_data_from_page(page_text)
@@ -116,6 +124,12 @@ if run_button:
             with log:
                 st.warning(f"&nbsp;&nbsp;↳ Extraction failed — skipping. ({e})")
             continue
+
+        if debug_mode:
+            with log:
+                with st.expander(f"DEBUG — AI extraction result for page {i+1}", expanded=False):
+                    import json as _json
+                    st.json(_json.dumps(extracted, indent=2))
 
         # Compare
         mismatches = comparator.compare(url, extracted, master_company, master_general)
