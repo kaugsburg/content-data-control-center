@@ -7,14 +7,12 @@ import re
 
 
 def _normalize_str(value) -> str:
-    """Lowercase, strip whitespace and common punctuation for fuzzy matching."""
     if value is None:
         return ""
-    return re.sub(r"[^\w.]", "", str(value).lower().strip())
+    return re.sub(r"[^\w\s]", "", str(value).lower().strip())
 
 
 def _normalize_number(value) -> float | None:
-    """Strip $, commas and return as float, or None if unparseable."""
     if value is None:
         return None
     cleaned = re.sub(r"[$,\s]", "", str(value))
@@ -24,14 +22,32 @@ def _normalize_number(value) -> float | None:
         return None
 
 
-def _fuzzy_company_match(master_name: str, extracted_name: str) -> bool:
+def _fuzzy_match(a: str, b: str) -> bool:
+    """True if the key words of a appear in b or vice versa."""
+    a_norm = _normalize_str(a)
+    b_norm = _normalize_str(b)
+    # Check direct containment first
+    if a_norm in b_norm or b_norm in a_norm:
+        return True
+    # Check if all significant words from a appear in b
+    words_a = set(w for w in a_norm.split() if len(w) > 2)
+    words_b = set(w for w in b_norm.split() if len(w) > 2)
+    if words_a and words_a.issubset(words_b):
+        return True
+    if words_b and words_b.issubset(words_a):
+        return True
+    return False
+
+
+def _best_cost_match(master_label: str, cost_mentions: list[dict]) -> dict | None:
     """
-    True if extracted company name contains the master name or vice versa
-    (handles minor phrasing differences like 'Andersen' vs 'Andersen Windows').
+    Find the cost_mention from the page whose label best matches the master label.
+    Returns the best match or None.
     """
-    a = _normalize_str(master_name)
-    b = _normalize_str(extracted_name)
-    return a in b or b in a
+    for mention in cost_mentions:
+        if _fuzzy_match(master_label, mention.get("label", "")):
+            return mention
+    return None
 
 
 def compare(
@@ -41,31 +57,25 @@ def compare(
     master_general_rows: list[dict],
 ) -> list[dict]:
     """
-    Compare extracted page data against both master data sources.
-
-    Returns a list of mismatch dicts with keys:
-        page_url, company_or_category, data_type,
-        found_on_page, master_value, notes, context_snippet
+    Compare extracted page data against master data.
+    Returns a list of mismatch dicts.
     """
     mismatches = []
-
     extracted_companies = extracted.get("companies", [])
-    extracted_general = extracted.get("general_costs", [])
+    cost_mentions = extracted.get("cost_mentions", [])
 
-    # --- Company-level checks ---
+    # --- Company-level checks (BBB, rating, lawsuit) ---
     for master_row in master_company_rows:
         company = str(master_row.get("Company", "")).strip()
         data_type = str(master_row.get("Data Type", "")).strip().lower()
         master_val = str(master_row.get("Value", "")).strip()
 
-        # Find matching company in extracted data
         matched_company = next(
-            (c for c in extracted_companies if _fuzzy_company_match(company, c.get("company_name", ""))),
+            (c for c in extracted_companies if _fuzzy_match(company, c.get("company_name", ""))),
             None,
         )
 
         if matched_company is None:
-            # Company not found on this page — skip (may be a different page's data)
             continue
 
         found_val = None
@@ -77,18 +87,21 @@ def compare(
         elif data_type == "rating":
             found_val = matched_company.get("rating")
             context = matched_company.get("rating_context")
-        elif data_type in ("company_cost_low", "cost_low"):
-            found_val = matched_company.get("cost_low")
-            context = matched_company.get("cost_context")
-        elif data_type in ("company_cost_high", "cost_high"):
-            found_val = matched_company.get("cost_high")
-            context = matched_company.get("cost_context")
-        elif data_type in ("company_cost_avg", "cost_avg"):
-            found_val = matched_company.get("cost_avg")
-            context = matched_company.get("cost_context")
         elif data_type == "lawsuit":
             found_val = matched_company.get("lawsuit_summary")
             context = matched_company.get("lawsuit_context")
+        elif "cost" in data_type:
+            # For company cost types, look in cost_mentions with company name in label
+            company_label = f"{company} {data_type.replace('company_', '').replace('_', ' ')}"
+            match = _best_cost_match(company_label, cost_mentions)
+            if match:
+                if "low" in data_type:
+                    found_val = match.get("cost_low")
+                elif "high" in data_type:
+                    found_val = match.get("cost_high")
+                else:
+                    found_val = match.get("cost_avg")
+                context = match.get("context_snippet")
 
         if found_val is None:
             mismatches.append({
@@ -115,39 +128,31 @@ def compare(
             })
 
     # --- General cost checks ---
+    # Build a search label from Category + Data Type and find the best matching
+    # cost mention on the page based on that label.
     for master_row in master_general_rows:
         category = str(master_row.get("Category", "")).strip()
         data_type = str(master_row.get("Data Type", "")).strip().lower()
         master_val = str(master_row.get("Value", "")).strip()
 
-        matched_general = next(
-            (g for g in extracted_general if _fuzzy_company_match(category, g.get("category", ""))),
-            None,
-        )
+        # Combine category and data type into a label to search against page cost labels
+        search_label = f"{category} {data_type.replace('_', ' ')}"
+        match = _best_cost_match(search_label, cost_mentions)
 
-        if matched_general is None:
+        if match is None:
             continue
 
         found_val = None
-        context = matched_general.get("context_snippet")
+        context = match.get("context_snippet")
 
-        if data_type == "cost_low":
-            found_val = matched_general.get("cost_low")
-        elif data_type == "cost_high":
-            found_val = matched_general.get("cost_high")
-        elif data_type == "cost_avg":
-            found_val = matched_general.get("cost_avg")
+        if "low" in data_type:
+            found_val = match.get("cost_low")
+        elif "high" in data_type:
+            found_val = match.get("cost_high")
+        elif "avg" in data_type:
+            found_val = match.get("cost_avg")
 
         if found_val is None:
-            mismatches.append({
-                "page_url": url,
-                "company_or_category": category,
-                "data_type": data_type,
-                "found_on_page": "NOT FOUND",
-                "master_value": master_val,
-                "notes": f"Could not find {data_type} for category '{category}' on this page.",
-                "context_snippet": None,
-            })
             continue
 
         mismatch = _values_differ(data_type, str(found_val), master_val)
@@ -166,25 +171,17 @@ def compare(
 
 
 def _values_differ(data_type: str, found: str, master: str) -> str | None:
-    """
-    Compare two values. Returns a human-readable note if they differ, else None.
-    Uses numeric comparison for cost/rating types, string comparison for others.
-    """
     numeric_types = {"cost_low", "cost_high", "cost_avg", "company_cost_low",
                      "company_cost_high", "company_cost_avg", "rating"}
 
     if data_type in numeric_types:
         found_num = _normalize_number(found)
         master_num = _normalize_number(master)
-        if found_num is None or master_num is None:
-            # Fall through to string comparison
-            pass
-        elif abs(found_num - master_num) < 0.01:
-            return None
-        else:
+        if found_num is not None and master_num is not None:
+            if abs(found_num - master_num) < 0.01:
+                return None
             return f"Page shows {found_num}, master says {master_num}"
 
-    # String comparison (BBB score, lawsuit, etc.)
     if _normalize_str(found) == _normalize_str(master):
         return None
 

@@ -11,11 +11,8 @@ _EXTRACTION_TOOL = {
     "function": {
         "name": "extract_page_data",
         "description": (
-            "Extract all data points from the article that could be compared against "
-            "internal reference data. Only extract values explicitly stated on the page — "
-            "do not infer or fabricate. For each data point, also capture a short "
-            "context_snippet (the surrounding sentence or phrase, ~20-40 words) so we "
-            "can locate it on the page later."
+            "Extract all data points from the page content. "
+            "Only extract values explicitly stated — do not infer or fabricate."
         ),
         "parameters": {
             "type": "object",
@@ -33,15 +30,15 @@ _EXTRACTION_TOOL = {
                             "company_name": {"type": "string"},
                             "bbb_score": {
                                 "type": ["string", "null"],
-                                "description": "BBB letter grade, e.g. 'A+', 'A', 'B'"
+                                "description": "BBB letter grade, e.g. 'A+', 'A', 'B', 'NR'"
                             },
                             "bbb_context": {
                                 "type": ["string", "null"],
-                                "description": "Surrounding text where the BBB score appears"
+                                "description": "Exact line or phrase from the page where the BBB score appears"
                             },
                             "rating": {
                                 "type": ["number", "null"],
-                                "description": "Numeric rating, e.g. 4.2"
+                                "description": "Numeric overall rating, e.g. 4.2"
                             },
                             "rating_scale": {
                                 "type": ["string", "null"],
@@ -49,27 +46,7 @@ _EXTRACTION_TOOL = {
                             },
                             "rating_context": {
                                 "type": ["string", "null"],
-                                "description": "Surrounding text where the rating appears"
-                            },
-                            "cost_low": {
-                                "type": ["number", "null"],
-                                "description": "Low end of a cost range in dollars (number only, no $ sign)"
-                            },
-                            "cost_high": {
-                                "type": ["number", "null"],
-                                "description": "High end of a cost range in dollars"
-                            },
-                            "cost_avg": {
-                                "type": ["number", "null"],
-                                "description": "Average cost in dollars if only one figure given"
-                            },
-                            "cost_unit": {
-                                "type": ["string", "null"],
-                                "description": "Unit for cost, e.g. 'per window', 'per project'"
-                            },
-                            "cost_context": {
-                                "type": ["string", "null"],
-                                "description": "Surrounding text where the cost appears"
+                                "description": "Exact line or phrase from the page where the rating appears"
                             },
                             "lawsuit_mentioned": {
                                 "type": ["boolean", "null"],
@@ -77,43 +54,67 @@ _EXTRACTION_TOOL = {
                             },
                             "lawsuit_summary": {
                                 "type": ["string", "null"],
-                                "description": "Brief summary of the lawsuit or legal issue"
+                                "description": "Brief summary of the lawsuit"
                             },
                             "lawsuit_context": {
                                 "type": ["string", "null"],
-                                "description": "Surrounding text where the lawsuit is mentioned"
+                                "description": "Exact line or phrase from the page where the lawsuit is mentioned"
                             }
                         },
                         "required": ["company_name"]
                     }
                 },
-                "general_costs": {
+                "cost_mentions": {
                     "type": "array",
-                    "description": "Category-level cost data NOT tied to a specific company",
+                    "description": (
+                        "Every cost or price figure found on the page — both company-specific "
+                        "and general category costs. For each one, describe WHAT the cost is for "
+                        "based on the surrounding text, not a predefined category."
+                    ),
                     "items": {
                         "type": "object",
                         "properties": {
-                            "category": {
+                            "label": {
                                 "type": "string",
-                                "description": "Service category, e.g. 'Window Replacement', 'Gutter Installation'"
+                                "description": (
+                                    "A plain-English description of what this cost is for, "
+                                    "derived from the surrounding text. "
+                                    "Examples: 'window replacement per window', "
+                                    "'gutter installation whole home', "
+                                    "'American Home Shield monthly cost', "
+                                    "'Choice Home Warranty service fee'"
+                                )
                             },
-                            "cost_low": {"type": ["number", "null"]},
-                            "cost_high": {"type": ["number", "null"]},
-                            "cost_avg": {"type": ["number", "null"]},
+                            "company": {
+                                "type": ["string", "null"],
+                                "description": "Company name if this cost is tied to a specific company, otherwise null"
+                            },
+                            "cost_low": {
+                                "type": ["number", "null"],
+                                "description": "Low end of cost range in dollars (number only)"
+                            },
+                            "cost_high": {
+                                "type": ["number", "null"],
+                                "description": "High end of cost range in dollars (number only)"
+                            },
+                            "cost_avg": {
+                                "type": ["number", "null"],
+                                "description": "Single average or typical cost if only one figure given"
+                            },
                             "unit": {
                                 "type": ["string", "null"],
-                                "description": "e.g. 'per window', 'per linear foot', 'whole home'"
+                                "description": "Unit of measurement, e.g. 'per window', 'per linear foot', 'per month', 'per claim'"
                             },
                             "context_snippet": {
                                 "type": ["string", "null"],
-                                "description": "Surrounding text where this cost appears"
+                                "description": "The exact line or phrase from the page where this cost appears"
                             }
                         },
-                        "required": ["category"]
+                        "required": ["label"]
                     }
                 }
             },
-            "required": ["page_title", "companies", "general_costs"]
+            "required": ["page_title", "companies", "cost_mentions"]
         }
     }
 }
@@ -123,23 +124,22 @@ _SYSTEM_PROMPT = (
     "You will receive structured text extracted from a published article page. "
     "Table rows are formatted as: Column1 | Column2 | Column3. "
     "List items are prefixed with a bullet (•). "
-    "Your job is to extract specific factual data points: BBB scores, company ratings, "
-    "cost figures, survey statistics, and lawsuit mentions. "
-    "Pay close attention to comparison tables where multiple companies are listed — "
-    "each row represents one company and its data. Make sure you associate each value "
-    "with the correct company name in that row. "
-    "Extract ONLY values that are explicitly stated in the text. "
-    "Do not guess, infer, or hallucinate values. "
-    "If a value is not present for a company, return null for that field. "
-    "For context_snippet fields, copy the exact line or phrase from the text "
-    "where the data point appears."
+    "Your job is to extract: "
+    "(1) Company-specific data: BBB scores, star ratings, lawsuit mentions. "
+    "(2) Every cost or price figure on the page — read the surrounding text to understand "
+    "what each cost is for and describe it in plain English as the label. "
+    "Do not force costs into predefined categories — let the page language guide the label. "
+    "Pay close attention to comparison tables where multiple companies appear in rows — "
+    "make sure each data point is matched to the correct company. "
+    "Extract ONLY values explicitly stated. Do not guess or fabricate. "
+    "For context_snippet fields, copy the exact line or phrase where the value appears."
 )
 
 
 def extract_data_from_page(page_text: str) -> dict:
     """
-    Send page text to the model via OpenRouter and return structured extracted data.
-    Returns a dict with keys: page_title, companies, general_costs.
+    Send page content to the model and return structured extracted data.
+    Returns a dict with keys: page_title, companies, cost_mentions.
     """
     response = _client.chat.completions.create(
         model=config.AI_MODEL,
@@ -159,4 +159,4 @@ def extract_data_from_page(page_text: str) -> dict:
     if tool_calls:
         return json.loads(tool_calls[0].function.arguments)
 
-    return {"page_title": "", "companies": [], "general_costs": []}
+    return {"page_title": "", "companies": [], "cost_mentions": []}
